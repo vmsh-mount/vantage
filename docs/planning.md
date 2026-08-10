@@ -1,0 +1,204 @@
+# Vantage — Planning Doc
+
+## Problem
+
+Holdings currently live in two separate apps (PaytmMoney for India equity, INDmoney for
+India + US equity), so there's no single view of net worth, allocation, or per-position
+gain/loss. Vantage is a local, single-user dashboard that consolidates both into one
+view, with a research feed layered on top in a later phase.
+
+## Scope
+
+Full spec (from the original brief) has five sections. **This MVP covers sections 1–2
+only**, per explicit instruction to get the consolidated dashboard working end-to-end
+before adding segmentation, research, or the digest feature:
+
+| # | Section | MVP? |
+|---|---|---|
+| 1 | Data integration (PaytmMoney + INDmoney APIs, normalized schema) | ✅ In scope |
+| 2 | Consolidated dashboard (net worth, breakdowns, gain/loss, thresholds, dividend calendar) | ✅ In scope, **except** dividend calendar — see Gaps below |
+| 3 | Portfolio segmentation (Core/Tactical tagging) | Deferred |
+| 4 | Research feed (news, ratings, IPOs, weekly digest) | Deferred |
+| 5 | Security requirements | ✅ Baseline built in from day one (applies to all phases) |
+
+## Query Taxonomy — What This Needs to Answer
+
+Reverse-engineered from the actual investing decisions this dashboard should support,
+not just the data it happens to display. Priority tiers decided 2026-07-18:
+
+**Tier 1 — MVP-1, surfaced prominently on the Dashboard**
+1. **Net worth & today's move** — total net worth, today/week/month change, biggest
+   mover. *"Where do I stand right now, and did anything change enough to matter?"*
+2. **Risk & concentration** — single-stock/sector overexposure, India:US allocation
+   drift from a target split, positions down big from average cost, threshold
+   proximity. *"Am I exposed to something I shouldn't be?"*
+3. **"What to look at today" alerts** — threshold breaches, big daily % movers.
+   *"What actually needs my attention, without opening either app?"*
+4. **Per-holding trajectory** — is today's move unusual *for this specific stock*, and
+   how does it sit within the last 7/30 days? *"+2.5% today — is that actually a good
+   number, or noise?"* Decided 2026-07-19, in response to the real pain point that a
+   bare today's-% is meaningless without its own volatility and recent trend as
+   context, and checking that per stock by clicking into each one doesn't scale. Shown
+   inline in the Holdings table (sparkline + 7d/30d numbers + an occasional flag), not
+   a separate page — the whole point is not having to click through.
+
+**Tier 2 — MVP-1, answerable but secondary (not the main dashboard view)**
+- Breakdown by broker / asset class / sector / India-US
+- Per-position and portfolio-wide gain/loss
+- Trend over time (net worth over the last N days) — enabled by snapshot history, shown
+  as a secondary chart rather than the hero view
+
+**Tier 3 — explicitly deprioritized, not forgotten**
+- **Tax** (LTCG/STCG split, forex gain component, sell-lot tax preview) — needs
+  trade-lot ingestion, which is real engineering on top of trade-book APIs. Handled via
+  broker-provided P&L statements at FY end instead, for now.
+- **Benchmarking** vs Nifty 50 / S&P 500 — needs an index-data source, unscoped.
+- **Dividend/income tracking** — folds into the dividend-calendar gap below.
+- **News/rating changes, IPO tracking, weekly digest** — section 4 of the original
+  spec, unchanged.
+
+This tiering drives the data-model and dashboard-layout decisions below.
+
+## Research Findings
+
+**PaytmMoney Open API**
+- Official SDK exists: [`pyPMClient`](https://github.com/paytmmoney/pyPMClient) (MIT).
+- Auth is a manual browser-login flow, not silent OAuth: register an app → get API
+  key/secret → build a login URL → user logs in in a browser (password + OTP) →
+  redirect carries a `request_token` → exchange that for an access token via
+  `generate_session()`. No refresh token — the access token needs periodic manual
+  regeneration (exact validity window to be confirmed once we've used it for a few days;
+  Zerodha-style Kite Connect, which this flow closely mirrors, expires tokens each day).
+- App type to register at developer.paytmmoney.com: **Trading API** — not *Publisher
+  API*, which is an unrelated embeddable "one-click trade button" product for external
+  webpages and has no portfolio-read capability.
+- `user_holdings_data()` gives India equity holdings directly (security_id, symbol,
+  exchange, quantity, avg price, LTP, market value, P&L).
+- **We already have PaytmMoney API key + secret** — build and test this integration live.
+
+**INDmoney (INDstocks API)**
+- Free signup + KYC, access token generated at **indstocks.com/app/api-trading** — a
+  separate developer portal, *not* inside the regular INDmoney consumer app (an earlier
+  version of this doc said "INDmoney dashboard → Algo Trading → Access Tokens," which
+  sent us looking in the wrong place; corrected 2026-07-19). **Token expires every 24
+  hours**, no refresh flow — has to be regenerated by hand daily if we want live data.
+- Full endpoint catalog checked (User Management, Market Data, Order Management, Smart
+  Orders, Portfolio & Risk Management, WebSockets, Utility APIs) — **it is India-equity
+  only (NSE/BSE)**. There is no US-stocks endpoint anywhere in the official API, despite
+  INDmoney's consumer app being known for combined India+US investing.
+- `GET /portfolio/holdings` returns security_id, trading_symbol, exchange_segment, isin,
+  quantity, average_price, last_traded_price, market_value, pnl.
+- **We don't have INDmoney credentials yet** — this integration ships behind a mock-data
+  toggle (`INDMONEY_MODE=mock`) until KYC + token generation is done. Flipping to live
+  later is a config change, not a code change.
+
+**Existing open-source landscape** (none do this exact combo — used for pattern
+reference only, not forked):
+- [balajiregt/myFinance ("FinFolio")](https://github.com/balajiregt/myFinance) — closest
+  in spirit: self-hosted, India-specific asset classes, keeps broker secrets server-side
+  only. Informs our security pattern.
+- [Ghostfolio](https://github.com/ghostfolio/ghostfolio) — heavier NestJS/Angular/Prisma
+  stack; good pattern for normalizing multi-source transactions into one schema, no
+  research-feed concept.
+- [Sparker0i/indian-stock-mcp-agent](https://github.com/Sparker0i/indian-stock-mcp-agent)
+  — Playwright-based unofficial scraper that *does* capture INDmoney US holdings by
+  intercepting the web app's internal XHR calls. We're deliberately **not** taking this
+  approach (see decision below) — flagged here so future-us knows the option exists if
+  manual entry proves too tedious.
+
+## Key Decisions
+
+1. **US holdings (INDmoney) are entered manually / via CSV paste, not scraped.**
+   Rationale: the official API doesn't expose them, and the only alternative is
+   unofficial browser automation against an undocumented internal API — fragile (breaks
+   on UI changes), requires a visible login/OTP step periodically, and is a ToS gray
+   area. Manual entry is a one-time-per-trade action; not worth the maintenance burden
+   for a single-user MVP. Revisit if this becomes annoying in practice.
+2. **Each broker integration has its own live/mock switch** (`PAYTMMONEY_MODE`,
+   `INDMONEY_MODE`), not one global app mode — because we can go live with PaytmMoney
+   immediately but INDmoney has to stay mocked until KYC finishes.
+3. **Stack: Python (FastAPI) bridge + React (Vite, TypeScript) deck, SQLite
+   storage.** FastAPI because PaytmMoney's official SDK is Python and the polling/
+   normalization logic is straightforward REST + scheduling. React/Vite chosen over
+   plain HTML/JS for a more maintainable dashboard UI as features grow.
+4. **Read-only by construction, not just by scope**: the broker client modules will only
+   ever implement GET calls. No order-placement/modification code will exist in the
+   codebase at all, regardless of what the API technically allows.
+5. **Snapshot history is in MVP-1.** A lightweight append-only snapshot (net worth +
+   per-holding value, written every scheduler tick) is cheap to add now, and every
+   trend/"today's move" query depends on it existing from day one — waiting means
+   permanently losing history for the gap period before it's added.
+6. **Trade-lot tracking and tax computation (LTCG/STCG, XIRR) are deliberately out of
+   scope for now**, not a default deferral. It's real engineering (trade-book ingestion
+   + tax-lot logic) for a need currently served well enough by broker-provided P&L
+   statements at FY end. Revisit if that stops being sufficient.
+7. **Trajectory shows 7d + 30d, always paired with a volatility-based "unusual move"
+   flag** (today's move ÷ that stock's own trailing daily stdev). A flat "big movers"
+   list would flag high-beta stocks constantly and quiet ones never; comparing each
+   stock against its own normal behavior is what actually answers "is this a good
+   number."
+8. **No historical-data backfill for trajectory in MVP-1.** Neither broker API exposes
+   historical closes via the holdings endpoint, and pulling them from a separate
+   market-data source is a new external dependency. Trajectory degrades gracefully
+   instead — "gathering history (day X of 30)" until ~5 days of snapshots exist for
+   that holding, similar to how a newly-added position has no track record yet in real
+   life either.
+9. **Manual (US) holdings have no live price feed — accepted as an MVP-1 limitation,
+   not solved with a new market-data dependency.** The scheduler never touches
+   `source='manual'` rows (see Scheduler in architecture.md), and nothing else in the
+   design fetches live US-equity prices, so a manual holding's `ltp` only changes when
+   you edit it. Today's-move, Alerts, and Trajectory are fully live for India holdings
+   (broker-synced) and show a distinct **"Static — priced by you"** state for manual
+   ones instead of a fabricated or stale-looking move. Same reasoning as decision #1
+   (manual entry, not scraped): revisit if this is genuinely annoying in practice,
+   don't solve it preemptively.
+10. **Alerts' "big mover" check reuses Trajectory's unusual-move flag (decision #7),
+    not a separate flat threshold.** A flat ≥3% rule would flag high-beta stocks
+    constantly and quiet ones never — literally the problem decision #7 already
+    exists to solve, so Alerts uses the same volatility-relative flag rather than
+    reintroducing it under a different name. Only applies to live-synced holdings —
+    manual ones don't have day-to-day price data for it to act on (decision #9).
+
+## Gaps / Open Questions (to resolve before or during implementation)
+
+- **Dividend calendar** (part of section 2 in the original spec) isn't cleanly exposed
+  by either API's holdings/funds endpoints. Likely needs a separate data source (e.g.
+  NSE corporate actions feed) — deferred out of MVP-1 until we scope that separately.
+- **PaytmMoney access token lifetime** — need to observe in practice once we've
+  generated one; affects how often the login script needs to be re-run.
+- ~~Whether either broker actually returns a previous-close field is unconfirmed.~~
+  **RESOLVED 2026-07-19 for PaytmMoney**: yes, field `pc` (previous close) — confirmed
+  against a real response covering 23 holdings, not a doc guess. See
+  docs/tasks/03-broker-integrations.md for the full field-name findings. `close_price`
+  stays nullable on the model regardless, since **INDmoney's equivalent is still
+  unconfirmed** (no real credentials tested yet) and manual holdings never have one at
+  all (Key Decision #9) — the snapshot-delta fallback in Trajectory/dashboard logic
+  remains necessary for those two cases even though PaytmMoney itself doesn't need it.
+- **INDmoney US-holdings CSV format** — INDmoney's actual export column layout hasn't
+  been seen yet. We'll ship a documented generic template and adjust the parser once a
+  real sample export is available.
+- **FX rate source for USD→INR** conversion of manual US holdings — plan is a free rate
+  API with a manual-override fallback in `.env`; needs a concrete provider pick during
+  implementation.
+- **Risk thresholds have no natural default.** Single-stock concentration will default
+  to flagging anything >15% of net worth, sector concentration >30%, both adjustable in
+  Settings. India:US target allocation has no sane default at all — it defaults to
+  "whatever your actual split is today" until you explicitly set a target, at which
+  point drift is measured against that.
+
+## Build Steps (once docs are reviewed and implementation is greenlit)
+
+1. Bridge skeleton: FastAPI app, config/env loading, SQLAlchemy models, DB init.
+2. Integrations: `base.py` (NormalizedHolding + BrokerClient protocol), `sample_data.py`,
+   `indmoney.py` (mock), `paytmmoney.py` (live), `fx.py`.
+3. Scheduler + routers (`dashboard`, `holdings`, `thresholds`, `status`), wired into `main.py`.
+4. `scripts/paytmmoney_login.py` — interactive CLI to bootstrap the PaytmMoney access token.
+5. Deck: Vite+React+TS scaffold, API client, Dashboard/ManualHoldings/Thresholds/Status pages.
+6. `README.md` — setup, credential flow, CSV format, how to add holdings/thresholds.
+7. Install deps, run bridge in mixed mode (PaytmMoney live, INDmoney mock), verify
+   `/api/dashboard` blends both correctly.
+8. Deck E2E walkthrough in browser: all four pages, charts, sorting, threshold
+   highlighting, manual CRUD, CSV import.
+9. First git commit.
+
+See [architecture.md](./architecture.md) for the technical design backing these steps.
