@@ -124,3 +124,7 @@ Full layout, one line per file, in [docs/architecture.md](docs/architecture.md#p
 
 Full detail, including the memory-poisoning defenses behind the agent's persistent memory,
 in [docs/architecture.md#security](docs/architecture.md#security).
+
+## License
+
+[MIT](LICENSE)
