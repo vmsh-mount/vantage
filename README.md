@@ -1,5 +1,7 @@
 # Vantage
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A local, single-user investment command center that consolidates PaytmMoney (India equity,
 live API) and INDmoney (India + US equity) holdings into one view — net worth, allocation,
 gain/loss, risk/concentration, tax opportunities, and per-holding trajectory — plus a
