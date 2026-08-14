@@ -33,6 +33,7 @@ This README is the entry point. Everything else lives in `docs/`:
 | [docs/mcp-tools.md](docs/mcp-tools.md) | **Full agent-tool reference** — every tool the AI panel can call, read vs. write, exactly what each does |
 | [docs/planning.md](docs/planning.md) | **Why, Phase 1** — the original design rationale, query taxonomy, key decisions |
 | [docs/planning-phase2.md](docs/planning-phase2.md) | **Why, Phase 2** — tax spine, MCP/agent architecture, the persistent-memory redesign (what the first attempt got wrong and why) |
+| [docs/compass-prd.md](docs/compass-prd.md) | **Proposed, not yet built** — Compass: goal-setting (sector diversification, return targets, dividend tracking) with real diagnosis when a goal's missed |
 | [docs/tasks/](docs/tasks/) | **Build history** — every task, in order, with real findings, bugs found and fixed, and live-verification traces. Start at [docs/tasks/README.md](docs/tasks/README.md) |
 | [docs/ui-flow-prototype.html](docs/ui-flow-prototype.html) | Phase 1's clickable static mockup (historical reference, open directly in a browser) |
 
