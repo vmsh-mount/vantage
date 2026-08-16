@@ -15,11 +15,13 @@ anywhere in this codebase**, for any broker, for any reason.
 
 ## Status
 
-**Done.** Phase 1 (MVP dashboard) and Phase 2 (tax suggestions, deterministic fact tools,
+**Done.** Phase 1 (MVP dashboard), Phase 2 (tax suggestions, deterministic fact tools,
 the Vantage MCP server, the Ask Vantage panel, the daily digest, and the full persistent
 agent-memory system — thesis tracking, decision grading, memory-poisoning defenses, an
-agent-authored desk note, and a behavioral mirror) are all built, live-verified against real
-broker data, and merged to `main`. See [docs/tasks/README.md](docs/tasks/README.md) for the
+agent-authored desk note, and a behavioral mirror), and Compass (goal-setting: milestones,
+allocation targets, return/dividend goals, and risk controls, each with real diagnosis when
+you're missing them, not just a checkmark) are all built, live-verified against real broker
+data, and merged to `main`. See [docs/tasks/README.md](docs/tasks/README.md) for the
 complete build history.
 
 ## Documentation map
@@ -33,7 +35,7 @@ This README is the entry point. Everything else lives in `docs/`:
 | [docs/mcp-tools.md](docs/mcp-tools.md) | **Full agent-tool reference** — every tool the AI panel can call, read vs. write, exactly what each does |
 | [docs/planning.md](docs/planning.md) | **Why, Phase 1** — the original design rationale, query taxonomy, key decisions |
 | [docs/planning-phase2.md](docs/planning-phase2.md) | **Why, Phase 2** — tax spine, MCP/agent architecture, the persistent-memory redesign (what the first attempt got wrong and why) |
-| [docs/compass-prd.md](docs/compass-prd.md) | **Proposed, not yet built** — Compass: goal-setting (sector diversification, return targets, dividend tracking) with real diagnosis when a goal's missed |
+| [docs/compass-prd.md](docs/compass-prd.md) | **Compass** — goal-setting (milestones, allocation targets, return/dividend goals, risk controls) with real diagnosis when a goal's missed, not just a checkmark |
 | [docs/tasks/](docs/tasks/) | **Build history** — every task, in order, with real findings, bugs found and fixed, and live-verification traces. Start at [docs/tasks/README.md](docs/tasks/README.md) |
 | [docs/ui-flow-prototype.html](docs/ui-flow-prototype.html) | Phase 1's clickable static mockup (historical reference, open directly in a browser) |
 

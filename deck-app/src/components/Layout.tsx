@@ -30,16 +30,12 @@ const NAV_ITEMS = [
     ),
   },
   {
-    to: '/thresholds',
-    label: 'Thresholds',
+    to: '/compass',
+    label: 'Compass',
     icon: (
       <svg viewBox="0 0 20 20">
-        <line x1="3" y1="5" x2="17" y2="5" />
-        <circle cx="12" cy="5" r="1.8" />
-        <line x1="3" y1="10" x2="17" y2="10" />
-        <circle cx="7" cy="10" r="1.8" />
-        <line x1="3" y1="15" x2="17" y2="15" />
-        <circle cx="14" cy="15" r="1.8" />
+        <circle cx="10" cy="10" r="7.5" />
+        <path d="M12.8 7.2l-1.8 4.3-4.3 1.8 1.8-4.3z" />
       </svg>
     ),
   },

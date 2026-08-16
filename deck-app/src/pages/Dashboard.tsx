@@ -144,8 +144,9 @@ function TrajectoryCell({ holding }: { holding: DashboardHolding }) {
 type SortKey = 'symbol' | 'broker' | 'quantity' | 'market_value_inr' | 'pnl_pct';
 
 // Task 32 — zero-ceremony "why I own this" note per holding. Same
-// inline-input/blur-to-save pattern as the Thresholds page's stop-loss/
-// target inputs: no modal, no expandable row, just one field.
+// inline-input/blur-to-save pattern as Compass's Risk Controls section
+// uses for its stop-loss/target inputs: no modal, no expandable row,
+// just one field.
 function NotesCell({ holding }: { holding: DashboardHolding }) {
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState(holding.notes ?? '');

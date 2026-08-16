@@ -8,10 +8,15 @@ from app.db import init_db
 from app.routers import (
     agent_ws,
     alerts,
+    allocation_targets,
+    compass,
     dashboard,
     decisions,
+    dividends,
     facts,
+    goals,
     holdings,
+    milestones,
     quarantine,
     risk,
     statements,
@@ -55,8 +60,13 @@ app.add_middleware(RunContextMiddleware)
 app.include_router(dashboard.router)
 app.include_router(risk.router)
 app.include_router(alerts.router)
+app.include_router(allocation_targets.router)
 app.include_router(trend.router)
 app.include_router(holdings.router)
+app.include_router(dividends.router)
+app.include_router(goals.router)
+app.include_router(milestones.router)
+app.include_router(compass.router)
 app.include_router(thresholds.router)
 app.include_router(settings_router.router)
 app.include_router(status.router)

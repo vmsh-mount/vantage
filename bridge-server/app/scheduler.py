@@ -7,7 +7,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.audit_log import log_api_call
-from app.breakdowns import compute_breakdown_sums
+from app.breakdowns import compute_breakdown_sums, compute_total_pnl
 from app.config import settings
 from app.db import SessionLocal
 from app.digest import run_daily_digest
@@ -138,9 +138,14 @@ def _refresh_manual_market_value_inr(db, fx_rate: float) -> None:
 def _write_snapshots(db) -> None:
     all_holdings = db.query(Holding).all()
     total_net_worth_inr = sum(h.market_value_inr for h in all_holdings)
+    # Milestone's pnl_pct metric type (docs/compass-prd.md §6.3) reads this
+    # trailing history the same way net_worth already does — no separate
+    # pipeline, just one more column on the same snapshot.
+    _, total_pnl_pct = compute_total_pnl(all_holdings)
     db.add(
         PortfolioSnapshot(
             total_net_worth_inr=total_net_worth_inr,
+            total_pnl_pct=total_pnl_pct,
             breakdown_json=compute_breakdown_sums(all_holdings),
         )
     )

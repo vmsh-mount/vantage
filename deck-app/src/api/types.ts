@@ -243,3 +243,203 @@ export interface BrokerSyncResult {
 export interface RefreshOut {
   results: Record<string, BrokerSyncResult>;
 }
+
+// ---------- Compass (docs/compass-prd.md) ----------
+
+export interface DividendIn {
+  broker: string;
+  symbol: string;
+  amount_inr: number;
+  payment_date: string;
+  notes?: string | null;
+}
+
+export interface DividendOut {
+  id: number;
+  broker: string;
+  symbol: string;
+  amount_inr: number;
+  payment_date: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface DividendsListOut {
+  dividends: DividendOut[];
+}
+
+export type AllocationDimension = 'sector' | 'asset_class' | 'region';
+
+export interface AllocationTargetIn {
+  dimension: AllocationDimension;
+  bucket: string;
+  target_pct: number;
+  tolerance_pct?: number;
+  rationale?: string | null;
+}
+
+export interface AllocationTargetOut {
+  id: number;
+  dimension: string;
+  bucket: string;
+  target_pct: number;
+  tolerance_pct: number;
+  rationale: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface AllocationTargetsListOut {
+  targets: AllocationTargetOut[];
+}
+
+export interface AllocationProgressItem {
+  id: number;
+  dimension: string;
+  bucket: string;
+  target_pct: number;
+  tolerance_pct: number;
+  rationale: string | null;
+  actual_pct: number;
+  actual_value_inr: number;
+  status: 'on_target' | 'underweight' | 'overweight';
+  gap_pct: number;
+  unmatched_bucket_names: string[];
+}
+
+export interface AllocationProgressOut {
+  dimension: string;
+  progress: AllocationProgressItem[];
+}
+
+export interface DimensionBreakdownItem {
+  bucket: string;
+  actual_pct: number;
+  actual_value_inr: number;
+}
+
+export interface DimensionBreakdownOut {
+  dimension: string;
+  breakdown: DimensionBreakdownItem[];
+}
+
+export type MilestoneMetricType = 'net_worth' | 'pnl_pct';
+
+export interface MilestoneIn {
+  name: string;
+  metric_type?: MilestoneMetricType;
+  target_value: number;
+  target_date: string;
+  rationale?: string | null;
+}
+
+export interface MilestoneOut {
+  id: number;
+  name: string;
+  metric_type: string;
+  target_value: number;
+  target_date: string;
+  rationale: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface MilestonesListOut {
+  milestones: MilestoneOut[];
+}
+
+export interface MilestoneProgressOut {
+  id: number;
+  name: string;
+  metric_type: MilestoneMetricType;
+  target_value: number;
+  target_date: string;
+  rationale: string | null;
+  current_value: number | null;
+  progress_pct: number | null;
+  status: 'met' | 'on_pace' | 'behind' | 'not_enough_data';
+  actual_pace_per_day: number | null;
+  required_pace_per_day: number | null;
+  projected_date: string | null;
+  days_remaining: number | null;
+  pace_window_days: number;
+}
+
+export type GoalScopeType = 'portfolio' | 'sector' | 'holding';
+export type GoalMetricType = 'price_return_pct' | 'dividend_coverage' | 'dividend_amount';
+
+export interface GoalIn {
+  name: string;
+  metric_type: GoalMetricType;
+  target_value: number;
+  scope_type?: GoalScopeType;
+  scope_value?: string | null;
+  comparison?: 'gte' | 'lte';
+  period?: string;
+  period_n?: number | null;
+  rationale?: string | null;
+}
+
+export interface GoalOut {
+  id: number;
+  name: string;
+  metric_type: string;
+  scope_type: string;
+  scope_value: string | null;
+  comparison: string;
+  target_value: number;
+  period: string;
+  period_n: number | null;
+  rationale: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface GoalsListOut {
+  goals: GoalOut[];
+}
+
+export interface GoalContribution {
+  broker: string;
+  symbol: string;
+  start_value_inr: number;
+  current_value_inr: number;
+  return_pct: number;
+  contribution_pp: number;
+}
+
+export interface GoalCoverageMonth {
+  year: number;
+  month: number;
+  covered: boolean;
+}
+
+// The shape genuinely varies by metric_type — contributions only for
+// price_return_pct, coverage/gap_months only for dividend_coverage,
+// prior_period_total_inr only for dividend_amount. Optional fields, not a
+// union, since every progress item shares the same base fields regardless.
+export interface GoalProgressOut {
+  id: number;
+  name: string;
+  metric_type: string;
+  scope_type: string;
+  scope_value: string | null;
+  comparison: string;
+  target_value: number;
+  period: string;
+  rationale: string | null;
+  actual_value: number | null;
+  status: 'met' | 'missed' | 'not_enough_data';
+  period_start?: string;
+  contributions?: GoalContribution[];
+  window_months?: number;
+  coverage?: GoalCoverageMonth[];
+  gap_months?: string[];
+  prior_period_total_inr?: number;
+}
+
+export interface CompassSummaryOut {
+  goals: { total: number; met: number };
+  allocation_targets: { total: number; on_target: number };
+  milestones: { total: number; on_pace: number };
+}

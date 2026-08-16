@@ -2,6 +2,7 @@
    redesigned. Keep class names in sync with that file if it's ever touched. */
 
 :root {
+  color-scheme: light dark;
   --bg: #eef0ec;
   --surface: #ffffff;
   --surface-2: #f5f6f2;
@@ -43,6 +44,7 @@
   }
 }
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --bg: #14181a; --surface: #1c2225; --surface-2: #20272a; --text: #e7ebe6; --text-muted: #93a099;
   --border: #2b3336; --accent: #6ba3b8; --accent-soft: #23343a; --accent-contrast: #0e1516;
   --gain: #6bbf85; --gain-soft: #1c2f22; --loss: #e08872; --loss-soft: #33221e;
@@ -51,6 +53,7 @@
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 1px rgba(0, 0, 0, 0.25);
 }
 :root[data-theme='light'] {
+  color-scheme: light;
   --bg: #eef0ec; --surface: #ffffff; --surface-2: #f5f6f2; --text: #1e2422; --text-muted: #5b655f;
   --border: #d8dcd2; --accent: #2f5f74; --accent-soft: #dbe7ea; --accent-contrast: #f5f9fa;
   --gain: #3f7d54; --gain-soft: #e1efe3; --loss: #b8503d; --loss-soft: #f6e4df;
@@ -259,10 +262,46 @@ tr.row-flash { animation: flash 1.1s ease; }
 @media (max-width: 900px) { .form-row { grid-template-columns: 1fr 1fr; } }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
-input[type='text'], input[type='number'] {
+input[type='text'], input[type='number'], input[type='date'], select {
   font-family: var(--font-mono); font-size: 13px; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text); width: 100%;
+  background: var(--surface); color: var(--text);
 }
+/* width lives here, scoped to .field, rather than on the bare type
+   selector above — a bare input[type='number'] has higher specificity
+   (0,1,1) than a plain class like .inline-input (0,1,0), so a
+   universal "width: 100%" there silently wins over any single-class
+   width override no matter where it's declared in the file. That's
+   exactly what blew up the Risk Controls stop-loss/target cells into
+   full-column-width boxes for a 2-3 digit number: .inline-input's
+   width: 72px could never win the specificity fight. Every real form
+   field is inside a .field grid cell anyway, so scoping width there
+   costs nothing and leaves standalone inputs (.inline-input,
+   .notes-input) free to size themselves. */
+.field input[type='text'], .field input[type='number'], .field input[type='date'], .field select {
+  width: 100%;
+}
+input[type='text']:focus, input[type='number']:focus, input[type='date']:focus, select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+input[type='text']:hover, input[type='number']:hover, input[type='date']:hover, select:hover { border-color: var(--text-muted); }
+/* Native chrome (calendar icon, dropdown arrow) otherwise renders with the
+   OS's light-mode assumption regardless of the page's own dark theme —
+   the color-scheme declarations above fix that; appearance: none + a
+   hand-drawn chevron keeps the arrow itself legible and on-brand across
+   browsers instead of leaving it to each engine's own default glyph. */
+select {
+  appearance: none;
+  padding-right: 30px;
+  /* #8b9691 is a fixed neutral grey (data URIs can't read CSS vars) chosen
+     to read clearly against both the light and dark --surface tones. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b9691' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+input[type='date'] { cursor: text; }
+input[type='date']::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.75; }
+input[type='date']::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 input[type='range'] { accent-color: var(--accent); width: 100%; }
 .inline-input { width: 72px; padding: 5px 7px; font-size: 12.5px; }
 .notes-input { width: 180px; }
@@ -306,6 +345,134 @@ textarea {
 /* ---------- Loading / error states (new, not in the prototype) ---------- */
 .loading-state, .error-state { padding: 24px; color: var(--text-muted); font-size: 13.5px; }
 .error-state { color: var(--loss); }
+
+/* ---------- Compass (docs/compass-prd.md) ---------- */
+:root { --ontrack: var(--gain); --ontrack-soft: var(--gain-soft); --atrisk: var(--warn); --atrisk-soft: var(--warn-soft); }
+
+/* One stat bar, not four separate cards — each tile previously carried
+   its own background/border/shadow at 16-18px padding around two short
+   lines of text, and .summary-tile-figure (a <p>) had no margin reset so
+   the browser's default 1em top+bottom margin (~48px, on a 24px figure)
+   was pure invisible bloat on top of that. A single bordered strip with
+   thin dividers between tiles reads as one glanceable unit, matches how
+   the rest of the app treats a single logical block (one .card, not N),
+   and every pixel of height is now real content. */
+.summary-strip {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow-card); margin-bottom: 22px; overflow: hidden;
+}
+@media (max-width: 900px) { .summary-strip { grid-template-columns: repeat(2, 1fr); } }
+.summary-tile { padding: 12px 18px; border-left: 1px solid var(--border); }
+.summary-tile:first-child { border-left: none; }
+@media (max-width: 900px) {
+  .summary-tile:nth-child(2n+1) { border-left: none; }
+  .summary-tile:nth-child(n+3) { border-top: 1px solid var(--border); }
+}
+.summary-tile-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 0 0 5px; }
+.summary-tile-figure { font-family: var(--font-mono); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: baseline; gap: 6px; margin: 0; }
+.summary-tile-figure .of { font-size: 12.5px; color: var(--text-muted); font-weight: 400; }
+.summary-tile.tone-gain .summary-tile-figure { color: var(--gain); }
+.summary-tile.tone-warn .summary-tile-figure { color: var(--warn); }
+
+/* Each Compass module (Milestone/Allocation/Goals/Dividend log) is a
+   .card in its own right — before this, .compass-section carried no
+   background/border of its own, so consecutive sections ran into each
+   other with nothing but a margin between them. */
+.compass-section { margin-bottom: 22px; }
+.compass-section:last-child { margin-bottom: 0; }
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  margin: -18px -20px 16px; padding: 18px 20px 16px; border-bottom: 1px solid var(--border);
+}
+.section-title { font-family: var(--font-display); font-size: 18px; margin: 0; }
+.section-sub { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; }
+.section-add { font-size: 12px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 2px; }
+.section-add:hover { text-decoration: underline; }
+
+.milestone-card + .milestone-card { margin-top: 12px; }
+.milestone-name { font-family: var(--font-display); font-size: 16px; margin: 0 0 4px; }
+.milestone-target { font-size: 12px; color: var(--text-muted); margin: 0 0 14px; }
+.milestone-figures { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.milestone-current { font-family: var(--font-mono); font-size: 22px; font-weight: 600; }
+.milestone-of { font-family: var(--font-mono); font-size: 13px; color: var(--text-muted); }
+.progress-track { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+.progress-fill { height: 100%; background: var(--chart-1); border-radius: 6px 0 0 6px; transition: width 0.4s ease; }
+.milestone-pace { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12.5px; color: var(--text-muted); flex-wrap: wrap; }
+
+.dim-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.dim-tab { font-size: 12px; padding: 6px 13px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+.dim-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+
+.bucket-row { display: grid; grid-template-columns: 150px 1fr 90px 30px; gap: 14px; align-items: center; padding: 8px 0; }
+@media (max-width: 760px) { .bucket-row { grid-template-columns: 1fr; gap: 6px; } }
+.bucket-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bucket-track { position: relative; height: 20px; }
+.bucket-track .rail-bg { position: absolute; top: 8px; left: 0; right: 0; height: 4px; border-radius: 3px; background: var(--surface-2); }
+.bucket-target-zone { position: absolute; top: 5px; height: 10px; border-radius: 5px; background: var(--accent-soft); border: 1px solid var(--accent); opacity: 0.55; }
+.bucket-actual-fill { position: absolute; top: 8px; left: 0; height: 4px; border-radius: 3px; }
+.bucket-actual-fill.tone-gain { background: var(--gain); }
+.bucket-actual-fill.tone-warn { background: var(--warn); }
+.bucket-actual-fill.tone-loss { background: var(--loss); }
+.bucket-marker { position: absolute; top: 1px; width: 2px; height: 18px; background: var(--text); border-radius: 1px; }
+.bucket-figures { text-align: right; }
+.bucket-actual-val { font-family: var(--font-mono); font-size: 13px; font-weight: 600; display: block; }
+.bucket-target-val { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); display: block; }
+.bucket-gap-note { grid-column: 1 / -1; font-size: 11.5px; color: var(--text-muted); margin-top: -4px; }
+.bucket-gap-note.tone-loss { color: var(--loss); }
+.bucket-gap-note.tone-warn { color: var(--warn); }
+.dim-legend { display: flex; gap: 18px; margin-top: 12px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
+.dim-legend-item { display: flex; align-items: center; gap: 6px; }
+.dim-legend-swatch { width: 12px; height: 6px; border-radius: 3px; flex: none; }
+
+.goal-card { padding: 16px 18px; }
+.goal-card + .goal-card { margin-top: 12px; }
+.goal-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.goal-name { font-size: 14.5px; font-weight: 600; margin: 0; }
+.goal-meta { font-size: 11.5px; color: var(--text-muted); margin: 4px 0 0; font-family: var(--font-mono); }
+.goal-readout { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.goal-actual { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
+.goal-actual.tone-gain { color: var(--gain); }
+.goal-actual.tone-loss { color: var(--loss); }
+.goal-target-note { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); }
+
+.why-toggle { margin-top: 12px; }
+.why-toggle summary { cursor: pointer; user-select: none; font-size: 12px; color: var(--accent); list-style: none; }
+.why-toggle summary::-webkit-details-marker { display: none; }
+.why-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.contrib-row { display: grid; grid-template-columns: 96px 1fr 72px; gap: 10px; align-items: center; font-size: 12.5px; }
+.contrib-sym { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contrib-track { height: 8px; background: var(--surface-2); border-radius: 4px; position: relative; overflow: hidden; }
+.contrib-fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.contrib-fill.tone-gain { background: var(--gain); left: 50%; }
+.contrib-fill.tone-loss { background: var(--loss); right: 50%; }
+.contrib-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--border); }
+.contrib-val { font-family: var(--font-mono); text-align: right; }
+.contrib-val.tone-gain { color: var(--gain); }
+.contrib-val.tone-loss { color: var(--loss); }
+
+.coverage-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.coverage-chip { flex: 1; min-width: 34px; text-align: center; }
+.coverage-dot { width: 100%; aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; font-size: 11px; }
+.coverage-dot.filled { background: var(--gain-soft); border-color: var(--gain); color: var(--gain); }
+.coverage-dot.empty { background: var(--surface-2); color: var(--text-muted); }
+.coverage-month { font-size: 9.5px; color: var(--text-muted); font-family: var(--font-mono); text-transform: uppercase; }
+
+/* Risk Controls' two subsections (Risk settings / Per-holding stop-loss)
+   sit inside one outer section card — a top border on every subsection
+   after the first marks the internal split without another full card. */
+.risk-controls-sub { padding-top: 20px; margin-top: 20px; border-top: 1px solid var(--border); }
+.risk-controls-sub:first-child { padding-top: 0; margin-top: 0; border-top: none; }
+.risk-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.risk-summary strong { font-weight: 600; }
+
+.compass-form { padding: 14px; background: var(--surface-2); border-radius: 10px; margin-bottom: 14px; }
+.compass-form .form-row { background: none; padding: 0; margin-bottom: 0; }
+/* A form with more than one row (Goals, Allocation targets with a
+   rationale field) had zero gap between stacked rows — the second row
+   sat flush against the first with no breathing room. */
+.compass-form .form-row + .form-row { margin-top: 12px; }
+.compass-form .hint { margin-top: 6px; }
 
 /* ---------- Ask-Your-Portfolio Panel (task 29) ---------- */
 .row-ai-highlight { background: var(--accent-soft); transition: background 0.3s ease; }

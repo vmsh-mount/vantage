@@ -30,12 +30,30 @@ For US/other positions INDmoney's API doesn't expose. Add/edit/delete by hand, o
 CSV. These never get touched by the sync scheduler — price only moves when you edit it, by
 design (there's no live feed to poll).
 
-## Thresholds
+## Compass
 
-Per-holding stop-loss %/target % (sign convention: stop-loss negative, target positive), plus
-the portfolio-wide risk settings (concentration limits, target India:US split) that drive the
-Dashboard's Risk panel. Purely local — setting a threshold here never touches your broker or
-places an order; you still execute it yourself.
+Where you said you wanted to go, and how close you actually are — with real diagnosis when
+you're not. Five sections (full design in [compass-prd.md](./compass-prd.md)):
+
+- **Milestone** — a target reached by a date, not a recurring check (net worth by a date, or
+  an overall P&L % target like "break even by March"), with a real pace projection from
+  trailing portfolio history — never a guessed date.
+- **Allocation targets** — a target % per bucket within a dimension (sector, asset class,
+  region), checked against your real current allocation. A bucket at real 0% against a
+  target is a named gap, not a missing checkmark; the add-target form shows your current %
+  for a bucket as soon as you type/pick one.
+- **Goals** — a single number checked against a target over a period: portfolio/sector/
+  holding return %, dividend coverage (which trailing months had a logged dividend), or
+  dividend amount vs. target.
+- **Dividend log** — logged by hand (no broker API exposes this data) — the data source
+  behind the two dividend goal types.
+- **Risk controls** — guardrails, not goals: per-holding stop-loss %/target % (sign
+  convention: stop-loss negative, target positive) plus the portfolio-wide risk settings
+  (concentration limits, target India:US split) that drive the Dashboard's Risk panel. Moved
+  in from the original standalone Thresholds page — same data, same endpoints, now living
+  alongside the rest of what you set for yourself rather than on its own nav item. Purely
+  local either way — setting a threshold here never touches your broker or places an order;
+  you still execute it yourself.
 
 ## Status
 

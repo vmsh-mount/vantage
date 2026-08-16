@@ -81,9 +81,11 @@ vantage/
         Layout.tsx                 # left nav + AiPanel mount (persists across page nav)
         AiPanel.tsx                  # the "Ask Vantage" side panel — reasoning blocks, tool
                                       # cards, markdown-rendered answers, UI-actions
+        RiskControlsSection.tsx       # Compass's 5th section (moved from the old
+                                       # standalone Thresholds page — see Compass PRD §12)
       lib/format.ts, queries.ts, highlight.tsx
       pages/
-        Dashboard.tsx, ManualHoldings.tsx, Thresholds.tsx, Status.tsx
+        Dashboard.tsx, ManualHoldings.tsx, Compass.tsx, Status.tsx
   docs/
     planning.md, planning-phase2.md     # design rationale (Phase 1, Phase 2) — the "why"
     architecture.md                      # this file — the current "how"
@@ -251,7 +253,7 @@ only tools that ever change state — every other tool is read-only.
 Single-page app (`react-router-dom`), left nav + main content per page, plus the **Ask
 Vantage** panel (`AiPanel.tsx`) mounted once in `Layout.tsx` (sibling to the routed
 content) so its WebSocket connection and conversation persist across page navigation. Four
-routed pages — Dashboard, Manual Holdings, Thresholds, Status — each backed by
+routed pages — Dashboard, Manual Holdings, Compass, Status — each backed by
 `@tanstack/react-query` against the typed `api/client.ts`. The panel renders reasoning
 blocks, tool-call cards (correlated `tool_use`/`tool_result` pairs — a real bug this task's
 own testing caught: never claim an action succeeded before its result confirms it), and the

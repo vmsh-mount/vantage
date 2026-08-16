@@ -17,11 +17,16 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from app.allocation_targets import (
+    SUPPORTED_DIMENSIONS as _ALLOCATION_DIMENSIONS,
+    compute_allocation_progress as _compute_allocation_progress,
+)
 from app.behavioral import (
     compute_averaging_down as _compute_averaging_down,
     compute_disposition_effect as _compute_disposition_effect,
     compute_win_loss_asymmetry as _compute_win_loss_asymmetry,
 )
+from app.compass import compute_compass_summary as _compute_compass_summary
 from app.db import SessionLocal
 from app.decisions import (
     get_decisions as _get_decisions,
@@ -30,7 +35,13 @@ from app.decisions import (
 )
 from app.facts.benchmark import get_benchmarks as _get_benchmarks
 from app.facts.volatility import get_volatility_stops as _get_volatility_stops
+from app.goals import compute_goal_progress as _compute_goal_progress, list_goals as _list_goals
+from app.milestones import (
+    compute_milestone_progress as _compute_milestone_progress,
+    list_milestones as _list_milestones,
+)
 from app.routers.dashboard import get_dashboard as _get_dashboard
+from app.routers.dividends import list_dividends as _list_dividends
 from app.routers.risk import get_risk as _get_risk
 from app.routers.status import get_status as _get_status
 from app.routers.thresholds import _upsert_threshold, list_thresholds as _list_thresholds
@@ -335,3 +346,109 @@ def get_behavioral_patterns() -> dict[str, Any]:
             "averaging_down": _compute_averaging_down(db),
             "win_loss_asymmetry": _compute_win_loss_asymmetry(db),
         }
+
+
+@mcp.tool()
+def get_dividends(broker: str | None = None, symbol: str | None = None) -> dict[str, Any]:
+    """Every logged dividend receipt, newest-first — Compass (docs/compass-prd.md
+    §8). Manual entry only: no broker API exposes dividend data (confirmed
+    live against both real accounts — see the Dividend model's own
+    docstring). Optionally filter by broker and/or symbol. Returns an empty
+    list if nothing has been logged yet, not an error."""
+    with SessionLocal() as db:
+        result = _list_dividends(broker=broker, symbol=symbol, db=db)
+        return result.model_dump(mode="json")
+
+
+@mcp.tool()
+def get_allocation_progress(dimension: str) -> dict[str, Any]:
+    """Real allocation-target progress for one dimension — Compass
+    (docs/compass-prd.md §6.2, §9). dimension must be one of: sector,
+    asset_class, region ("market_cap" isn't wired up yet — see
+    app/models/allocation_target.py's own docstring for the real reason:
+    it needs a live per-holding INDmoney lookup, not a free local
+    aggregation like the other three). Every bucket with a configured
+    target is reported, including one at real 0% actual — that's a named
+    gap ("no holding in this sector at all"), never just a missing
+    checkmark. status is one of: on_target, underweight, overweight.
+    bucket can be several real sector/asset-class/region names joined
+    with commas (e.g. "Steel, Non Ferrous Metals, Entertainment"), summed
+    together — for small holdings that don't individually deserve a
+    target. unmatched_bucket_names names any comma-part that doesn't
+    match a real sector/asset-class/region among current holdings — a
+    real, found bug: a bucket typed as "QSR" against the broker's actual
+    "Quick Service Restaurant" label used to read as an indistinguishable
+    fake 0%. Non-empty here means don't trust actual_pct/actual_value_inr
+    at face value — check the exact real label (get_dashboard's
+    breakdowns field has it) before reporting this bucket's number as
+    real. rationale is whatever free text was entered when the target was
+    set (why that particular %), null if none was given. Returns an empty
+    list if no targets are configured for this dimension yet, not an
+    error."""
+    if dimension not in _ALLOCATION_DIMENSIONS:
+        return {"error": f"Unsupported dimension {dimension!r}; must be one of {_ALLOCATION_DIMENSIONS}"}
+    with SessionLocal() as db:
+        return {"dimension": dimension, "progress": _compute_allocation_progress(db, dimension)}
+
+
+@mcp.tool()
+def get_milestone_progress() -> dict[str, Any]:
+    """Real progress for every active milestone — Compass
+    (docs/compass-prd.md §6.3, §9). metric_type is "net_worth" (a
+    net-worth-by-date target) or "pnl_pct" (e.g. a break-even-by-date
+    target — target_value 0, or any percentage: negative to cut a loss
+    further, positive to lock in a gain). For each: current value,
+    progress % (net_worth only — a percent-of-target ratio doesn't
+    generalize to pnl_pct, so it's null there; current_value/target_value
+    are the honest read for that metric type), status (met / on_pace /
+    behind / not_enough_data), the real recent pace (trailing-90-day trend
+    from PortfolioSnapshot history), the pace actually required to hit the
+    target on time, and a projected date at the current trend — explicitly
+    a projection from recent trend, never a guarantee. rationale is
+    whatever free text was entered when the milestone was set (why that
+    particular target — distinct from the computed pace numbers above),
+    null if none was given. Returns an empty list if no milestones are
+    configured yet, not an error."""
+    with SessionLocal() as db:
+        milestones = _list_milestones(db)
+        return {"milestones": [_compute_milestone_progress(db, m) for m in milestones]}
+
+
+@mcp.tool()
+def get_goal_progress() -> dict[str, Any]:
+    """Real progress for every active Goal — Compass (docs/compass-prd.md
+    §6.1, §9). metric_type is one of: price_return_pct (scoped to
+    portfolio/a sector/a holding, per-holding contribution attribution
+    included, ranked worst-first when missed), dividend_coverage (which
+    trailing months had a logged dividend, gap months named), or
+    dividend_amount (real total this period vs. target, plus the prior
+    period's total for trend context). period for price_return_pct/
+    dividend_amount is monthly/quarterly/yearly (calendar-anchored, since
+    the 1st of the current month/quarter/year) or trailing_n_days (a
+    rolling N-day window ending today, N = period_n, default 30 — e.g. a
+    "recovery check over 90 days" that isn't calendar-aligned).
+    dividend_coverage instead uses period_n as a trailing month count
+    directly. status is "met" | "missed" |
+    "not_enough_data" — the last one only when there isn't yet a real
+    baseline to compare against (e.g. price_return_pct with no snapshot
+    history at the period start), never a fabricated number. rationale is
+    whatever free text was entered when the goal was set (why that
+    particular target), null if none was given. Returns an empty list if
+    no goals are configured yet, not an error."""
+    with SessionLocal() as db:
+        goals = _list_goals(db)
+        return {"goals": [_compute_goal_progress(db, g) for g in goals]}
+
+
+@mcp.tool()
+def get_compass_summary() -> dict[str, Any]:
+    """The whole-Compass summary in one call — docs/compass-prd.md §10, §11.
+    Mirrors get_behavioral_patterns' one-call-bundles-several-computations
+    pattern: rather than calling get_goal_progress, get_allocation_progress
+    (for every dimension), and get_milestone_progress separately just to
+    answer "how am I doing overall", this gives the three counts
+    (goals met/total, allocation buckets on_target/total, milestones
+    on_pace-or-met/total) in one shot. Call the individual tools for the
+    real numbers and status per item — this is only the rollup."""
+    with SessionLocal() as db:
+        return _compute_compass_summary(db)

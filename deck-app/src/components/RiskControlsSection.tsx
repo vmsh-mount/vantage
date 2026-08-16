@@ -1,9 +1,22 @@
+// Compass's 5th section. Moved here from the old standalone /thresholds
+// page (task 11/17) — the per-holding stop-loss/target lines and the
+// concentration/region-split limits are real things you set for
+// yourself, same as a Goal or Milestone, but they're guardrails ("don't
+// let this fall too far / get too big") rather than aspirations ("get
+// this higher") — kept as their own subsection within Compass rather
+// than reshaped into a Goal/AllocationTarget/Milestone row, since the
+// semantics genuinely differ (no target date, no "met" state, evaluated
+// continuously against cost basis rather than a period).
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import type { ThresholdIn, ThresholdListItem } from '../api/types';
 import { brokerLabel } from '../lib/format';
 import { invalidatePortfolioQueries } from '../lib/queries';
+
+// react-query dedupes by queryKey, so calling useQuery(['riskSettings'/'thresholds'])
+// again here (RiskSettingsPanel/ThresholdsTable below already do) costs no extra
+// request — this just reads the same cached data to build the always-visible summary.
 
 function invalidateRiskDependent(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ['thresholds'] });
@@ -14,12 +27,14 @@ function ThresholdRow({ item }: { item: ThresholdListItem }) {
   const queryClient = useQueryClient();
   const [stopLoss, setStopLoss] = useState(item.stop_loss_pct != null ? String(item.stop_loss_pct) : '');
   const [target, setTarget] = useState(item.target_pct != null ? String(item.target_pct) : '');
+  const [notes, setNotes] = useState(item.notes ?? '');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setStopLoss(item.stop_loss_pct != null ? String(item.stop_loss_pct) : '');
     setTarget(item.target_pct != null ? String(item.target_pct) : '');
-  }, [item.stop_loss_pct, item.target_pct]);
+    setNotes(item.notes ?? '');
+  }, [item.stop_loss_pct, item.target_pct, item.notes]);
 
   const saveMutation = useMutation({
     mutationFn: (payload: ThresholdIn) => api.updateThreshold(payload),
@@ -80,11 +95,25 @@ function ThresholdRow({ item }: { item: ThresholdListItem }) {
     saveMutation.mutate({ broker: item.broker, symbol: item.symbol, stop_loss_pct: sl, target_pct: tg });
   }
 
+  // Notes save independently of stop-loss/target (the backend only ever
+  // overwrites a field it actually received — see thresholds.py's own
+  // comment) — so jotting down "why" doesn't require a stop-loss/target
+  // to already be set, and editing the stop-loss doesn't touch the note.
+  // The backend has no way to null out a single field via PUT (same
+  // reason stop-loss/target can't be blanked that way either), so a
+  // blanked note is simply not saved rather than erroring — Clear
+  // removes it along with everything else for this holding.
+  function commitNotes() {
+    const trimmed = notes.trim();
+    if (trimmed === '' || trimmed === (item.notes ?? '')) return;
+    saveMutation.mutate({ broker: item.broker, symbol: item.symbol, notes: trimmed });
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') e.currentTarget.blur();
   }
 
-  const hasAnyThreshold = item.stop_loss_pct != null || item.target_pct != null;
+  const hasAnyThreshold = item.stop_loss_pct != null || item.target_pct != null || !!item.notes;
 
   return (
     <>
@@ -121,6 +150,17 @@ function ThresholdRow({ item }: { item: ThresholdListItem }) {
           />{' '}
           %
         </td>
+        <td>
+          <input
+            type="text"
+            className="inline-input notes-input"
+            placeholder="Why this line?"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={commitNotes}
+            onKeyDown={onKeyDown}
+          />
+        </td>
         <td style={{ textAlign: 'right' }}>
           <button
             className="btn btn-ghost btn-sm"
@@ -133,7 +173,7 @@ function ThresholdRow({ item }: { item: ThresholdListItem }) {
       </tr>
       {error && (
         <tr>
-          <td colSpan={4} style={{ padding: '0 14px 8px' }}>
+          <td colSpan={5} style={{ padding: '0 14px 8px' }}>
             <p className="error-state" style={{ padding: 0 }}>
               {error}
             </p>
@@ -158,6 +198,7 @@ function ThresholdsTable() {
             <th>Holding</th>
             <th className="num">Stop-Loss</th>
             <th className="num">Target</th>
+            <th>Why</th>
             <th></th>
           </tr>
         </thead>
@@ -270,28 +311,89 @@ function RiskSettingsPanel() {
   );
 }
 
-export function Thresholds() {
+// Collapsed-state readout — the numbers that matter without opening
+// anything: your two concentration limits, the region target (or that
+// none is set), how many holdings actually have a stop-loss/target
+// configured out of how many exist, and — the one that's actually
+// urgent — how many are past their stop-loss right now (real data from
+// the same alerts computation the Dashboard's own alert feed uses, not
+// re-derived here).
+function RiskSummary() {
+  const settingsQuery = useQuery({ queryKey: ['riskSettings'], queryFn: api.riskSettings });
+  const thresholdsQuery = useQuery({ queryKey: ['thresholds'], queryFn: api.thresholds });
+  const alertsQuery = useQuery({ queryKey: ['alerts'], queryFn: api.alerts });
+
+  if (settingsQuery.isLoading || thresholdsQuery.isLoading) {
+    return <p className="loading-state" style={{ padding: '8px 0' }}>Loading…</p>;
+  }
+  if (settingsQuery.isError || thresholdsQuery.isError) {
+    return <p className="error-state" style={{ padding: '8px 0' }}>Can't reach bridge-server.</p>;
+  }
+
+  const settings = settingsQuery.data;
+  const holdings = thresholdsQuery.data?.thresholds ?? [];
+  const withStopLoss = holdings.filter((h) => h.stop_loss_pct != null).length;
+  const withTarget = holdings.filter((h) => h.target_pct != null).length;
+  const breached = alertsQuery.data?.alerts.filter((a) => a.kind === 'stop_loss').length ?? 0;
+
   return (
-    <>
-      <div className="topbar">
+    <div className="risk-summary">
+      <span className="badge badge-neutral">
+        Stock limit <strong className="mono">{settings?.concentration_stock_pct}%</strong>
+      </span>
+      <span className="badge badge-neutral">
+        Sector limit <strong className="mono">{settings?.concentration_sector_pct}%</strong>
+      </span>
+      <span className="badge badge-neutral">
+        India target{' '}
+        <strong className="mono">{settings?.target_india_pct != null ? `${settings.target_india_pct}%` : 'not set'}</strong>
+      </span>
+      <span className="badge badge-neutral">
+        <strong className="mono">{withStopLoss}</strong> of {holdings.length} have a stop-loss
+      </span>
+      <span className="badge badge-neutral">
+        <strong className="mono">{withTarget}</strong> of {holdings.length} have a target
+      </span>
+      {breached > 0 && (
+        <span className="badge badge-loss">
+          <strong className="mono">{breached}</strong> past stop-loss now
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function RiskControlsSection() {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <section className="card compass-section">
+      <div className="section-head">
         <div>
-          <h1 className="topbar-title">Thresholds</h1>
-          <p className="topbar-sub">Your own stop-loss / target lines, independent of the broker</p>
+          <h2 className="section-title">Risk controls</h2>
+          <p className="section-sub">Guardrails, not goals — concentration limits and per-holding stop-loss/target lines</p>
         </div>
+        <button className="section-add" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? 'Collapse' : 'Expand'}
+        </button>
       </div>
 
-      <div className="stack" style={{ marginTop: 20 }}>
-        <div className="card">
-          <p className="card-title">Risk Settings</p>
-          <RiskSettingsPanel />
-        </div>
+      <RiskSummary />
 
-        <div className="card">
-          <p className="card-title">Per-Holding Stop-Loss / Target</p>
-          <ThresholdsTable />
-          <p className="footnote">Independent of any broker-side alerts — these thresholds are yours.</p>
-        </div>
-      </div>
-    </>
+      {expanded && (
+        <>
+          <div className="risk-controls-sub">
+            <p className="card-title">Risk settings</p>
+            <RiskSettingsPanel />
+          </div>
+
+          <div className="risk-controls-sub">
+            <p className="card-title">Per-holding stop-loss / target</p>
+            <ThresholdsTable />
+            <p className="footnote">Independent of any broker-side alerts — these thresholds are yours.</p>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

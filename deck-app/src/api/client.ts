@@ -1,10 +1,27 @@
 import type {
   AlertsOut,
+  AllocationDimension,
+  AllocationProgressOut,
+  AllocationTargetIn,
+  AllocationTargetOut,
+  AllocationTargetsListOut,
   CsvImportOut,
   DashboardOut,
+  DimensionBreakdownOut,
+  DividendIn,
+  DividendOut,
+  DividendsListOut,
+  GoalIn,
+  GoalOut,
+  GoalProgressOut,
+  GoalsListOut,
   HoldingNotesIn,
   HoldingOut,
   ManualHoldingIn,
+  MilestoneIn,
+  MilestoneOut,
+  MilestoneProgressOut,
+  MilestonesListOut,
   QuarantineOut,
   QuarantineReviewOut,
   RefreshOut,
@@ -105,4 +122,31 @@ export const api = {
   quarantine: () => request<QuarantineOut>('/api/quarantine'),
   reviewQuarantined: (table: string, id: number) =>
     request<QuarantineReviewOut>(`/api/quarantine/${table}/${id}/review`, { method: 'POST' }),
+
+  // ---------- Compass ----------
+  dividends: () => request<DividendsListOut>('/api/dividends'),
+  createDividend: (payload: DividendIn) =>
+    request<DividendOut>('/api/dividends', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteDividend: (id: number) => request<void>(`/api/dividends/${id}`, { method: 'DELETE' }),
+
+  allocationTargets: (dimension?: AllocationDimension) =>
+    request<AllocationTargetsListOut>(`/api/allocation-targets${dimension ? `?dimension=${dimension}` : ''}`),
+  createAllocationTarget: (payload: AllocationTargetIn) =>
+    request<AllocationTargetOut>('/api/allocation-targets', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteAllocationTarget: (id: number) => request<void>(`/api/allocation-targets/${id}`, { method: 'DELETE' }),
+  allocationProgress: (dimension: AllocationDimension) =>
+    request<AllocationProgressOut>(`/api/allocation-targets/progress?dimension=${dimension}`),
+  allocationCurrentBreakdown: (dimension: AllocationDimension) =>
+    request<DimensionBreakdownOut>(`/api/allocation-targets/current-breakdown?dimension=${dimension}`),
+
+  milestones: () => request<MilestonesListOut>('/api/milestones'),
+  createMilestone: (payload: MilestoneIn) =>
+    request<MilestoneOut>('/api/milestones', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteMilestone: (id: number) => request<void>(`/api/milestones/${id}`, { method: 'DELETE' }),
+  milestonesProgress: () => request<MilestoneProgressOut[]>('/api/milestones/progress'),
+
+  goals: () => request<GoalsListOut>('/api/goals'),
+  createGoal: (payload: GoalIn) => request<GoalOut>('/api/goals', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteGoal: (id: number) => request<void>(`/api/goals/${id}`, { method: 'DELETE' }),
+  goalsProgress: () => request<GoalProgressOut[]>('/api/goals/progress'),
 };

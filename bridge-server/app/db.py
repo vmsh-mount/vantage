@@ -68,12 +68,58 @@ def _ensure_provenance_columns() -> None:
         conn.commit()
 
 
+def _ensure_portfolio_snapshot_pnl_pct_column() -> None:
+    """Same situation as _ensure_holdings_notes_column above — total_pnl_pct
+    was added to PortfolioSnapshot (Milestone's pnl_pct metric type) after
+    the table already existed in every checkout's local DB. Idempotent,
+    self-healing, same recipe."""
+    with engine.connect() as conn:
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(portfolio_snapshots)")).fetchall()}
+        if "total_pnl_pct" not in columns:
+            conn.execute(text("ALTER TABLE portfolio_snapshots ADD COLUMN total_pnl_pct FLOAT"))
+            conn.commit()
+
+
+def _ensure_allocation_target_rationale_column() -> None:
+    """Same situation again — rationale was added to AllocationTarget after
+    the table already existed. Idempotent, self-healing, same recipe."""
+    with engine.connect() as conn:
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(allocation_targets)")).fetchall()}
+        if "rationale" not in columns:
+            conn.execute(text("ALTER TABLE allocation_targets ADD COLUMN rationale TEXT"))
+            conn.commit()
+
+
+def _ensure_milestone_rationale_column() -> None:
+    """Same situation again — rationale was added to Milestone after the
+    table already existed. Idempotent, self-healing, same recipe."""
+    with engine.connect() as conn:
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(milestones)")).fetchall()}
+        if "rationale" not in columns:
+            conn.execute(text("ALTER TABLE milestones ADD COLUMN rationale TEXT"))
+            conn.commit()
+
+
+def _ensure_goal_rationale_column() -> None:
+    """Same situation again — rationale was added to Goal after the table
+    already existed. Idempotent, self-healing, same recipe."""
+    with engine.connect() as conn:
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(goals)")).fetchall()}
+        if "rationale" not in columns:
+            conn.execute(text("ALTER TABLE goals ADD COLUMN rationale TEXT"))
+            conn.commit()
+
+
 def init_db() -> None:
     from app.models import RiskSettings
 
     Base.metadata.create_all(bind=engine)
     _ensure_holdings_notes_column()
     _ensure_provenance_columns()
+    _ensure_portfolio_snapshot_pnl_pct_column()
+    _ensure_allocation_target_rationale_column()
+    _ensure_milestone_rationale_column()
+    _ensure_goal_rationale_column()
 
     with SessionLocal() as db:
         if db.query(RiskSettings).first() is None:

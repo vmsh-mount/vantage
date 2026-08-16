@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.agent_runner import run_one_shot
 from app.agent_security import build_scoped_extra_args
+from app.compass import compute_compass_summary
 from app.config import settings
 from app.db import SessionLocal
 from app.decisions import get_decisions
@@ -107,6 +108,26 @@ def _summary(db: Session) -> str:
     )
 
 
+def _compass_summary_line(db: Session) -> str | None:
+    """One deterministic line, not a new section — docs/compass-prd.md §12
+    build order deliberately keeps Compass out of the digest's structure and
+    just appends this to the existing summary. Returns None (and the line is
+    omitted entirely, same "omitted when empty" convention as every other
+    digest section) when nothing is configured yet, rather than a
+    padded "no goals configured" line."""
+    s = compute_compass_summary(db)
+    parts = []
+    if s["goals"]["total"]:
+        parts.append(f"{s['goals']['met']}/{s['goals']['total']} goals met")
+    if s["allocation_targets"]["total"]:
+        parts.append(f"{s['allocation_targets']['on_target']}/{s['allocation_targets']['total']} allocations on target")
+    if s["milestones"]["total"]:
+        parts.append(f"{s['milestones']['on_pace']}/{s['milestones']['total']} milestones on pace")
+    if not parts:
+        return None
+    return "Compass: " + ", ".join(parts)
+
+
 def build_digest(db: Session) -> dict:
     """Clarity over volume (§5): each section is ranked most-important-first
     and simply omitted when empty — a digest padded with "nothing to report"
@@ -117,6 +138,7 @@ def build_digest(db: Session) -> dict:
         "concentration": _concentration(db),
         "movers": _movers(db),
         "summary": _summary(db),
+        "compass_summary": _compass_summary_line(db),
     }
 
 
@@ -136,6 +158,8 @@ def render_text(content: dict, gap_message: str | None, agent_section: str | Non
             lines += [f"- {item}" for item in items]
             lines.append("")
     lines.append(content["summary"])
+    if content.get("compass_summary"):
+        lines.append(content["compass_summary"])
     if agent_section:
         # Task 36 — clearly labeled and visually separated from the
         # deterministic content above, never blended in as if it were the
@@ -166,6 +190,7 @@ def render_html(content: dict, gap_message: str | None, agent_section: str | Non
         if agent_section
         else ""
     )
+    compass_html = f"<p>{content['compass_summary']}</p>" if content.get("compass_summary") else ""
     body = (
         banner
         + section("Needs attention now", content["needs_attention"])
@@ -173,6 +198,7 @@ def render_html(content: dict, gap_message: str | None, agent_section: str | Non
         + section("Concentration", content["concentration"])
         + section("Big movers today", content["movers"])
         + f"<p>{content['summary']}</p>"
+        + compass_html
         + agent_html
     )
     return f"<html><body style='font-family: sans-serif;'>{body}</body></html>"

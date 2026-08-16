@@ -91,8 +91,10 @@ from app.config import settings
 VANTAGE_MCP_URL = f"http://127.0.0.1:{settings.bridge_server_port}/mcp"
 
 # The 8 read tools from task 26, task 33's get_thesis_history, task 34's
-# get_decisions, and task 37's get_behavioral_patterns — always safe to
-# allow, none of them write anything.
+# get_decisions, task 37's get_behavioral_patterns, and Compass's
+# get_dividends/get_allocation_progress/get_milestone_progress/
+# get_goal_progress/get_compass_summary — always safe to allow, none of
+# them write anything.
 READ_ONLY_TOOLS = [
     "mcp__vantage__get_dashboard",
     "mcp__vantage__get_risk",
@@ -105,6 +107,11 @@ READ_ONLY_TOOLS = [
     "mcp__vantage__get_thesis_history",
     "mcp__vantage__get_decisions",
     "mcp__vantage__get_behavioral_patterns",
+    "mcp__vantage__get_dividends",
+    "mcp__vantage__get_allocation_progress",
+    "mcp__vantage__get_milestone_progress",
+    "mcp__vantage__get_goal_progress",
+    "mcp__vantage__get_compass_summary",
 ]
 
 # The write tools task 26 (set_threshold), task 33 (add_thesis_entry), and

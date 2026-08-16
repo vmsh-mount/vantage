@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.breakdowns import compute_breakdown_sums, compute_net_worth_inr
+from app.breakdowns import compute_breakdown_sums, compute_net_worth_inr, compute_total_pnl
 from app.db import get_db
 from app.models import Holding, Threshold
 from app.schemas import BreakdownItem, DashboardHolding, DashboardOut
@@ -17,19 +17,11 @@ def get_dashboard(db: Session = Depends(get_db)) -> DashboardOut:
     thresholds = {(t.broker, t.symbol): t for t in db.query(Threshold).all()}
 
     total_move_abs = 0.0
-    total_pnl_abs_inr = 0.0
     holding_rows = []
     for h in holdings:
         move_abs, move_pct, pricing = compute_today_move(db, h)
         if move_abs is not None:
             total_move_abs += move_abs
-
-        # pnl_abs is stored in native currency (correct for a lone INR holding,
-        # wrong to sum raw across currencies once task 10's manual USD holdings
-        # exist) — normalize with the same market_value_inr/market_value ratio
-        # used for today's-move above, not a naive sum.
-        pnl_fx_factor = (h.market_value_inr / h.market_value) if h.market_value else 1.0
-        total_pnl_abs_inr += h.pnl_abs * pnl_fx_factor
 
         threshold = thresholds.get((h.broker, h.symbol))
         breached = bool(
@@ -69,10 +61,7 @@ def get_dashboard(db: Session = Depends(get_db)) -> DashboardOut:
     yesterday_net_worth_inr = net_worth_inr - total_move_abs
     today_move_pct = (total_move_abs / yesterday_net_worth_inr * 100) if yesterday_net_worth_inr else 0.0
 
-    # Same pattern as today_move_pct: derive the "before" baseline (total cost
-    # basis in INR) by subtracting the delta from the "after" total (net worth).
-    total_cost_basis_inr = net_worth_inr - total_pnl_abs_inr
-    total_pnl_pct = (total_pnl_abs_inr / total_cost_basis_inr * 100) if total_cost_basis_inr else 0.0
+    total_pnl_abs_inr, total_pnl_pct = compute_total_pnl(holdings)
 
     breakdowns = {
         key: [
