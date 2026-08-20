@@ -150,7 +150,18 @@ button { font-family: inherit; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .viewport { padding: 26px 34px 60px; flex: 1; min-width: 0; }
-.page { animation: pagein 0.28s ease both; }
+/* fill-mode "backwards" (not "both") on purpose: "backwards" still applies
+   the from-keyframe before the animation starts (no flash of unanimated
+   content), but WITHOUT "forwards" the element reverts to its normal
+   cascaded style once the animation ends — transform: none, same as the
+   to-keyframe's translateY(0) looks like anyway. "both" kept that
+   translateY(0) applied permanently after the animation finished, and per
+   spec ANY non-none transform (even a zero one) makes the element a new
+   containing block for its position:fixed descendants — Compass's Drawer
+   (and anything else position:fixed rendered inside a routed page) was
+   silently being fixed to .page's box instead of the viewport, so it
+   scrolled out of view instead of staying pinned on screen. */
+.page { animation: pagein 0.28s ease backwards; }
 @keyframes pagein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
   .page { animation: none; }
@@ -209,6 +220,11 @@ button { font-family: inherit; }
 .badge-live { background: var(--gain-soft); color: var(--gain); }
 .badge-mock { background: var(--warn-soft); color: var(--warn); }
 .badge-expired { background: var(--loss-soft); color: var(--loss); }
+/* Small status dot inside a badge — inherits the badge's own tone via
+   currentColor, so "Met"/"Behind"/"Missed" each get a matching dot. Was
+   referenced in the Compass status badges but never defined, which left a
+   stray 5px gap (from .badge's gap) and no dot. */
+.badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
 
 /* ---------- Breakdown ---------- */
 .breakdown-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -232,6 +248,11 @@ table.data-table th {
 }
 table.data-table th[data-sort] { cursor: pointer; user-select: none; }
 table.data-table th[data-sort]:hover { color: var(--text); }
+/* table.data-table th's own text-align: left (0,0,2,1) otherwise beats the
+   bare .num class (0,0,1,0) on every numeric header in the app (Dashboard,
+   ManualHoldings, RiskControls, Compass's dividend log) — headers rendered
+   left-aligned above right-aligned figures underneath them. */
+table.data-table th.num { text-align: right; }
 table.data-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 table.data-table tbody tr:last-child td { border-bottom: none; }
 table.data-table tbody tr:hover { background: var(--surface-2); }
@@ -314,11 +335,99 @@ textarea {
 .csv-preview.open { max-height: 320px; }
 .hint { font-size: 11.5px; color: var(--text-muted); margin: 8px 0 0; }
 
-/* ---------- Thresholds ---------- */
-.settings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-@media (max-width: 900px) { .settings-grid { grid-template-columns: 1fr; } }
-.setting-item label { display: block; font-size: 11.5px; color: var(--text-muted); margin-bottom: 8px; }
-.setting-value { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
+/* ---------- Risk controls (docs/compass-prd.md's Risk Controls section) ----------
+   Plain columns divided by rules, same rhythm as the rest of the redesigned
+   Compass page — no boxed cards, just dividers; big mono values read as
+   the actual content, not chrome. */
+.risk-stats { display: flex; flex-wrap: wrap; }
+.risk-stat { padding: 12px 18px; border-left: 1px solid var(--border); }
+.risk-stat:first-child { border-left: none; padding-left: 0; }
+.risk-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin: 0 0 4px; }
+.risk-stat-val { font-family: var(--font-mono); font-size: 15px; font-weight: 600; margin: 0; }
+.risk-stat-val.tone-loss { color: var(--loss); }
+.risk-stat-val .of { font-size: 11px; color: var(--text-muted); font-weight: 400; margin-left: 3px; }
+
+/* flex: 1 1 200px forced every column to at least 200px regardless of
+   content — "15%" and "not set" both sitting in a 200px+ slot, most of
+   it dead air. Sized by the slider's own natural width instead (the one
+   thing here that actually needs room to be usable), so a column is
+   only as wide as its content actually needs. */
+.settings-grid { display: flex; flex-wrap: wrap; gap: 28px; }
+.setting-item { flex: 0 0 auto; padding: 0 18px; border-left: 1px solid var(--border); }
+.setting-item:first-child { border-left: none; padding-left: 0; }
+@media (max-width: 900px) { .setting-item { border-left: none; padding: 10px 0; border-top: 1px solid var(--border); } .setting-item:first-child { border-top: none; padding-top: 0; } }
+.setting-item label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.setting-value { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
+.setting-item input[type=range] { display: block; width: 140px; }
+
+/* Per-holding stop-loss/target table: fixed column widths so "Why" (the
+   part that actually matters) gets real room instead of a couple of
+   truncated characters, and the number/note fields read as plain text —
+   no box — until you actually touch them. */
+/* .row-breach elsewhere (Dashboard) fills the whole row with --loss-soft,
+   which is fine for a compact single-line row — but this table's rows can
+   run 2-3 lines now that "Why" wraps, so a full-row solid fill turns into
+   a big, heavy block. A left accent stripe on the symbol cell carries the
+   same signal without painting the whole row. */
+/* Fills the card's actual width (min-width:640px would fight that on a
+   narrow card, so drop it) — but only "Why" gets to grow. Holding/SL/
+   Target/Action are pinned to what their content actually needs; a fixed
+   overall width just left a dead strip of blank card to the right of the
+   table, and stretching every column evenly would waste it padding out
+   columns that don't need it instead of the one column that benefits
+   from more room (fewer wrapped lines). */
+table.data-table.risk-table { table-layout: fixed; width: 100%; min-width: 0; }
+table.risk-table tr.row-breach { background: none; }
+table.risk-table tr.row-breach:hover { background: var(--surface-2); filter: none; }
+table.risk-table tr.row-breach td:first-child { box-shadow: inset 3px 0 0 var(--loss); }
+table.risk-table col.c-holding { width: 140px; }
+/* A little more breathing room around the number+unit than a hard
+   content-minimum fit — 58px read as cramped, right up against the
+   column boundary. */
+table.risk-table col.c-sl, table.risk-table col.c-tg { width: 72px; }
+table.risk-table col.c-action { width: 56px; }
+/* Tighter vertical rhythm — the base .data-table padding (10px top/bottom)
+   is sized for compact single-line rows; this table's rows are already
+   naturally taller from wrapped "Why" text, so extra padding on top of
+   that just compounds it. */
+table.risk-table td { padding-top: 6px; padding-bottom: 6px; }
+table.risk-table td.num { padding-right: 20px; }
+table.risk-table .sub { line-height: 1.3; }
+.risk-num-cell { display: flex; align-items: baseline; gap: 3px; justify-content: flex-end; font-family: var(--font-mono); }
+.risk-num-cell input {
+  width: 28px; text-align: right; font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+  padding: 2px 0; border: none; border-bottom: 1px solid transparent; background: none; color: var(--text);
+  /* appearance: textfield (an old Firefox-only trick) tells WebKit to
+     render its OWN native text-field box — an inset rounded rectangle —
+     regardless of the border/background set above, which is exactly the
+     "box around the number" that kept showing up. appearance: none
+     strips native chrome entirely (Chrome/Firefox/Safari all support it
+     for number inputs now), so only the styling above actually renders. */
+  appearance: none;
+}
+.risk-num-cell input::-webkit-outer-spin-button,
+.risk-num-cell input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.risk-num-cell input:hover { border-bottom-color: var(--border); }
+.risk-num-cell input:focus { border-bottom-color: var(--accent); outline: none; }
+.risk-num-cell .unit { color: var(--text-muted); font-size: 11.5px; }
+.risk-why-input {
+  /* The global textarea rule (index.css, used by the Milestone/Goal/
+     Allocation rationale fields) sets min-height: 88px and border-radius
+     — that 88px floor, not content, is what was forcing every row in
+     this table to the same fixed height regardless of note length. */
+  display: block; width: 100%; min-height: 0; font-size: 12.5px; line-height: 1.35; padding: 3px 0; font-family: inherit;
+  border: none; border-radius: 0; border-bottom: 1px solid transparent; background: none; color: var(--text); resize: none; overflow: hidden;
+}
+.risk-why-input::placeholder { color: var(--text-muted); }
+.risk-why-input:hover { border-bottom-color: var(--border); }
+.risk-why-input:focus { border-bottom-color: var(--accent); outline: none; }
+/* Clear only shows up when you're actually looking at that row — 19 rows
+   of an always-visible "Clear" button was pure chrome the rest of the time. */
+.risk-row-clear { opacity: 0; transition: opacity 0.15s ease; }
+table.risk-table tr:hover .risk-row-clear, table.risk-table tr:focus-within .risk-row-clear { opacity: 1; }
 
 /* ---------- Status ---------- */
 .status-card { padding: 18px 20px; }
@@ -349,31 +458,31 @@ textarea {
 /* ---------- Compass (docs/compass-prd.md) ---------- */
 :root { --ontrack: var(--gain); --ontrack-soft: var(--gain-soft); --atrisk: var(--warn); --atrisk-soft: var(--warn-soft); }
 
-/* One stat bar, not four separate cards — each tile previously carried
-   its own background/border/shadow at 16-18px padding around two short
-   lines of text, and .summary-tile-figure (a <p>) had no margin reset so
-   the browser's default 1em top+bottom margin (~48px, on a 24px figure)
-   was pure invisible bloat on top of that. A single bordered strip with
-   thin dividers between tiles reads as one glanceable unit, matches how
-   the rest of the app treats a single logical block (one .card, not N),
-   and every pixel of height is now real content. */
-.summary-strip {
-  display: grid; grid-template-columns: repeat(4, 1fr);
+/* Redesigned overview: three progress rings (Goals/Allocation/Milestones)
+   plus a dividend-log tile with its own sparkline, in one bordered strip —
+   replaces the old four flat text tiles. Color and ring-fill communicate
+   status before any number is read. */
+.overview {
+  display: grid; grid-template-columns: repeat(3, auto) 1fr;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: var(--shadow-card); margin-bottom: 22px; overflow: hidden;
 }
-@media (max-width: 900px) { .summary-strip { grid-template-columns: repeat(2, 1fr); } }
-.summary-tile { padding: 12px 18px; border-left: 1px solid var(--border); }
-.summary-tile:first-child { border-left: none; }
-@media (max-width: 900px) {
-  .summary-tile:nth-child(2n+1) { border-left: none; }
-  .summary-tile:nth-child(n+3) { border-top: 1px solid var(--border); }
-}
-.summary-tile-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 0 0 5px; }
-.summary-tile-figure { font-family: var(--font-mono); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: baseline; gap: 6px; margin: 0; }
-.summary-tile-figure .of { font-size: 12.5px; color: var(--text-muted); font-weight: 400; }
-.summary-tile.tone-gain .summary-tile-figure { color: var(--gain); }
-.summary-tile.tone-warn .summary-tile-figure { color: var(--warn); }
+@media (max-width: 900px) { .overview { grid-template-columns: repeat(2, 1fr); } }
+.ov-tile { padding: 14px 22px; display: flex; align-items: center; gap: 13px; border-left: 1px solid var(--border); min-width: 0; }
+.ov-tile:first-child { border-left: none; }
+.ov-ring-wrap { position: relative; width: 48px; height: 48px; flex: none; }
+.ov-ring-wrap svg { width: 48px; height: 48px; transform: rotate(-90deg); }
+.ov-ring-track { fill: none; stroke: var(--surface-2); stroke-width: 6; }
+.ov-ring-fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; }
+.ov-ring-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; }
+.ov-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 0 0 3px; }
+.ov-sub { font-size: 12px; color: var(--text-muted); margin: 0; }
+.ov-sub strong { color: var(--text); font-weight: 600; }
+.ov-div { padding: 14px 22px; border-left: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+@media (max-width: 900px) { .ov-div { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--border); } }
+.ov-div-figure { font-family: var(--font-mono); font-size: 19px; font-weight: 600; margin: 0; display: flex; align-items: baseline; gap: 6px; }
+.ov-div-of { font-size: 11.5px; color: var(--text-muted); font-weight: 400; }
+.ov-spark { flex: none; }
 
 /* Each Compass module (Milestone/Allocation/Goals/Dividend log) is a
    .card in its own right — before this, .compass-section carried no
@@ -385,61 +494,136 @@ textarea {
   display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap;
   margin: -18px -20px 16px; padding: 18px 20px 16px; border-bottom: 1px solid var(--border);
 }
+.section-title-row { display: flex; align-items: center; gap: 10px; }
 .section-title { font-family: var(--font-display); font-size: 18px; margin: 0; }
 .section-sub { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; }
 .section-add { font-size: 12px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 2px; }
 .section-add:hover { text-decoration: underline; }
+/* Risk Controls' whole header toggles, same disclosure pattern as every
+   row elsewhere in Compass — a chevron, not a text link you have to
+   aim for specifically. */
+/* .section-head already bleeds to the card's outer edge via its own
+   negative margin, so the hover background spans the full header width
+   with no extra margin tricks needed. */
+.section-head-toggle { cursor: pointer; }
+.section-head-toggle:hover { background: var(--surface-2); border-radius: 12px 12px 0 0; }
+.section-head-chev { color: var(--text-muted); font-size: 13px; align-self: center; flex: none; }
+/* Count of at-risk items right on the section header, so a section that's
+   fully on track never has to be opened to confirm that. */
+.section-flag { font-size: 11px; padding: 2px 9px; border-radius: 20px; font-family: var(--font-mono); background: var(--warn-soft); color: var(--warn); }
+/* Past-stop-loss is a loss, not just an off-target/behind warning — the
+   other section flags (Milestones/Allocation/Goals) all share the warn
+   tone since none of them are that severe. */
+.section-flag.tone-loss { background: var(--loss-soft); color: var(--loss); }
 
-.milestone-card + .milestone-card { margin-top: 12px; }
-.milestone-name { font-family: var(--font-display); font-size: 16px; margin: 0 0 4px; }
-.milestone-target { font-size: 12px; color: var(--text-muted); margin: 0 0 14px; }
-.milestone-figures { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-.milestone-current { font-family: var(--font-mono); font-size: 22px; font-weight: 600; }
-.milestone-of { font-family: var(--font-mono); font-size: 13px; color: var(--text-muted); }
-.progress-track { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
-.progress-fill { height: 100%; background: var(--chart-1); border-radius: 6px 0 0 6px; transition: width 0.4s ease; }
-.milestone-pace { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12.5px; color: var(--text-muted); flex-wrap: wrap; }
+/* One line per Milestone/Goal by default (~40px vs. the old ~150-180px
+   card) — click to expand the pace/trend detail and rationale inline
+   instead of it always occupying full card height. */
+.row-list { display: flex; flex-direction: column; margin: -18px -20px; }
+.item-row {
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr 108px 18px; gap: 14px; align-items: center;
+  padding: 11px 20px; border-bottom: 1px solid var(--border); cursor: pointer; background: none; border-left: none; border-right: none; border-top: none;
+  width: 100%; text-align: left; font: inherit; color: inherit;
+}
+.row-list > .item-row:last-child { border-bottom: none; }
+.item-row:hover { background: var(--surface-2); }
+.item-row.expanded { background: var(--surface-2); cursor: default; }
+.item-name { font-size: 13px; font-weight: 600; margin: 0; }
+.item-meta { font-size: 11px; color: var(--text-muted); margin: 2px 0 0; }
+.item-figs { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.item-cur { font-family: var(--font-mono); font-size: 14px; font-weight: 600; }
+.item-cur.tone-gain { color: var(--gain); }
+.item-cur.tone-loss { color: var(--loss); }
+.item-of { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+.mini-track { height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.mini-fill { height: 100%; border-radius: 4px 0 0 4px; transition: width 0.4s ease; }
+.item-chev { color: var(--text-muted); font-size: 12px; text-align: right; justify-self: end; }
+
+/* The expanded "why" panel — one calm, padded block instead of a thin
+   dashed-line strip crowded with tiny uppercase captions. Shared shape
+   for Milestones/Goals (.item-detail) and Allocation (.alloc-row-detail).
+   The row above it is already var(--surface-2) while expanded — giving
+   the panel that SAME background made it blend into the row with no
+   visible edge, so the 20px padding read as if it wasn't there. A
+   distinct surface + border gives the panel its own boundary, so the
+   padding is actually visible instead of implied. */
+.item-detail, .alloc-row-detail {
+  grid-column: 1 / -1; margin-top: 12px; padding: 20px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 16px;
+}
+.item-detail-stats { display: flex; gap: 28px; flex-wrap: wrap; align-items: center; }
+.detail-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 4px; }
+.detail-stat-val { font-family: var(--font-mono); font-size: 13px; font-weight: 600; margin: 0; }
+.detail-stat-val.tone-gain { color: var(--gain); }
+.detail-stat-val.tone-loss { color: var(--loss); }
+/* Plain paragraph, no quote-bar — the panel's own background already sets
+   it apart from the row above, so a left border was redundant noise. */
+.item-rationale, .why-note { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.6; }
+.why-block-title { font-size: 12.5px; font-weight: 600; color: var(--text); margin: 0 0 10px; }
+.item-detail .contrib-row { font-size: 12.5px; }
 
 .dim-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
 .dim-tab { font-size: 12px; padding: 6px 13px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
 .dim-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
 
-.bucket-row { display: grid; grid-template-columns: 150px 1fr 90px 30px; gap: 14px; align-items: center; padding: 8px 0; }
-@media (max-width: 760px) { .bucket-row { grid-template-columns: 1fr; gap: 6px; } }
-.bucket-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bucket-track { position: relative; height: 20px; }
-.bucket-track .rail-bg { position: absolute; top: 8px; left: 0; right: 0; height: 4px; border-radius: 3px; background: var(--surface-2); }
-.bucket-target-zone { position: absolute; top: 5px; height: 10px; border-radius: 5px; background: var(--accent-soft); border: 1px solid var(--accent); opacity: 0.55; }
-.bucket-actual-fill { position: absolute; top: 8px; left: 0; height: 4px; border-radius: 3px; }
-.bucket-actual-fill.tone-gain { background: var(--gain); }
-.bucket-actual-fill.tone-warn { background: var(--warn); }
-.bucket-actual-fill.tone-loss { background: var(--loss); }
-.bucket-marker { position: absolute; top: 1px; width: 2px; height: 18px; background: var(--text); border-radius: 1px; }
-.bucket-figures { text-align: right; }
-.bucket-actual-val { font-family: var(--font-mono); font-size: 13px; font-weight: 600; display: block; }
-.bucket-target-val { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); display: block; }
-.bucket-gap-note { grid-column: 1 / -1; font-size: 11.5px; color: var(--text-muted); margin-top: -4px; }
-.bucket-gap-note.tone-loss { color: var(--loss); }
-.bucket-gap-note.tone-warn { color: var(--warn); }
+/* Allocation targets: every bucket in a dimension as one grouped chart —
+   numbers land right after the label, the bar comes last, and each row
+   expands (like Milestones/Goals) for its gap note and rationale. */
+/* Bleeds horizontally to the card's outer edge (same trick .row-list uses
+   for Milestones/Goals) so a row's hover/expanded highlight spans the
+   full card width — .alloc-row's own 20px padding then keeps "Finance"
+   properly inset from THAT highlight's edge, instead of sitting flush
+   against it the way it did when the highlight started already-inset
+   and the row itself carried no padding of its own. */
+.alloc-chart { display: flex; flex-direction: column; gap: 4px; margin: 0 -20px; }
+.alloc-row {
+  display: grid; grid-template-columns: 110px 108px 1fr 18px; gap: 12px; align-items: center;
+  padding: 8px 20px; cursor: pointer; background: none; border: none; width: 100%; text-align: left; font: inherit; color: inherit;
+}
+@media (max-width: 760px) { .alloc-row { grid-template-columns: 1fr; gap: 6px; } }
+.alloc-row:hover { background: var(--surface-2); }
+.alloc-row.expanded { background: var(--surface-2); cursor: default; }
+.alloc-label { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alloc-figs { text-align: left; font-family: var(--font-mono); font-size: 11.5px; }
+.alloc-figs .actual { font-weight: 600; font-size: 13px; }
+.alloc-figs .target { color: var(--text-muted); display: block; font-size: 10px; margin-top: 1px; }
+.alloc-track { position: relative; height: 20px; }
+.alloc-track .rail-bg { position: absolute; top: 8px; left: 0; right: 0; height: 4px; border-radius: 3px; background: var(--surface-2); }
+.alloc-target-zone { position: absolute; top: 5px; height: 10px; border-radius: 5px; background: var(--accent-soft); border: 1px solid var(--accent); opacity: 0.55; }
+.alloc-actual-fill { position: absolute; top: 8px; left: 0; height: 4px; border-radius: 3px; }
+.alloc-actual-fill.tone-gain { background: var(--gain); }
+.alloc-actual-fill.tone-warn { background: var(--warn); }
+.alloc-actual-fill.tone-loss { background: var(--loss); }
+.alloc-marker { position: absolute; top: 1px; width: 2px; height: 18px; background: var(--text); border-radius: 1px; }
+.alloc-chev { grid-column: 4; color: var(--text-muted); font-size: 12px; text-align: right; }
+.alloc-gap-note { font-size: 11.5px; color: var(--text-muted); margin: 0; }
+.alloc-gap-note.tone-loss { color: var(--loss); }
+.alloc-gap-note.tone-warn { color: var(--warn); }
+
+/* The actual holdings making up a bucket, inside its expanded row — a
+   donut + legend, the same composition pattern the Dashboard's own
+   sector breakdown already uses (.donut-wrap/.legend there), so this
+   reads as the house way to show "what's this made of", not a new
+   invention just for Compass. */
+.donut-body { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+.donut-wrap { flex: none; width: 108px; height: 108px; position: relative; }
+.donut-total { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.donut-total-val { font-size: 12px; font-weight: 600; }
+.donut-total-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.donut-legend { display: flex; flex-direction: column; gap: 12px; flex: 1; min-width: 200px; }
+/* Value sits directly under its own name, not shoved to the row's far
+   edge — reads as one unit per holding instead of two columns forced
+   apart across the panel's full width. */
+.donut-legend-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
+.donut-sw { width: 10px; height: 10px; border-radius: 3px; flex: none; margin-top: 4px; }
+.donut-legend-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.donut-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donut-name .sub { font-weight: 400; color: var(--text-muted); font-size: 11.5px; }
+.donut-val { font-size: 11.5px; color: var(--text-muted); }
 .dim-legend { display: flex; gap: 18px; margin-top: 12px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; }
 .dim-legend-item { display: flex; align-items: center; gap: 6px; }
 .dim-legend-swatch { width: 12px; height: 6px; border-radius: 3px; flex: none; }
 
-.goal-card { padding: 16px 18px; }
-.goal-card + .goal-card { margin-top: 12px; }
-.goal-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
-.goal-name { font-size: 14.5px; font-weight: 600; margin: 0; }
-.goal-meta { font-size: 11.5px; color: var(--text-muted); margin: 4px 0 0; font-family: var(--font-mono); }
-.goal-readout { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.goal-actual { font-family: var(--font-mono); font-size: 20px; font-weight: 600; }
-.goal-actual.tone-gain { color: var(--gain); }
-.goal-actual.tone-loss { color: var(--loss); }
-.goal-target-note { font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); }
-
-.why-toggle { margin-top: 12px; }
-.why-toggle summary { cursor: pointer; user-select: none; font-size: 12px; color: var(--accent); list-style: none; }
-.why-toggle summary::-webkit-details-marker { display: none; }
-.why-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
 .contrib-row { display: grid; grid-template-columns: 96px 1fr 72px; gap: 10px; align-items: center; font-size: 12.5px; }
 .contrib-sym { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .contrib-track { height: 8px; background: var(--surface-2); border-radius: 4px; position: relative; overflow: hidden; }
@@ -451,28 +635,52 @@ textarea {
 .contrib-val.tone-gain { color: var(--gain); }
 .contrib-val.tone-loss { color: var(--loss); }
 
-.coverage-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.coverage-row { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
 .coverage-chip { flex: 1; min-width: 34px; text-align: center; }
 .coverage-dot { width: 100%; aspect-ratio: 1; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; font-size: 11px; }
 .coverage-dot.filled { background: var(--gain-soft); border-color: var(--gain); color: var(--gain); }
 .coverage-dot.empty { background: var(--surface-2); color: var(--text-muted); }
 .coverage-month { font-size: 9.5px; color: var(--text-muted); font-family: var(--font-mono); text-transform: uppercase; }
 
+/* Dividend log keeps the plain data-table, just with light vertical
+   column rules on top of the existing horizontal row rules. */
+.table-vlines th, .table-vlines td { border-right: 1px solid var(--border); }
+.table-vlines th:last-child, .table-vlines td:last-child { border-right: none; }
+
 /* Risk Controls' two subsections (Risk settings / Per-holding stop-loss)
    sit inside one outer section card — a top border on every subsection
    after the first marks the internal split without another full card. */
 .risk-controls-sub { padding-top: 20px; margin-top: 20px; border-top: 1px solid var(--border); }
 .risk-controls-sub:first-child { padding-top: 0; margin-top: 0; border-top: none; }
-.risk-summary { display: flex; flex-wrap: wrap; gap: 8px; }
-.risk-summary strong { font-weight: 600; }
 
-.compass-form { padding: 14px; background: var(--surface-2); border-radius: 10px; margin-bottom: 14px; }
-.compass-form .form-row { background: none; padding: 0; margin-bottom: 0; }
-/* A form with more than one row (Goals, Allocation targets with a
-   rationale field) had zero gap between stacked rows — the second row
-   sat flush against the first with no breathing room. */
-.compass-form .form-row + .form-row { margin-top: 12px; }
-.compass-form .hint { margin-top: 6px; }
+/* ---------- Add-item drawer (Milestones/Allocation/Goals/Dividends) ----------
+   The "+ Add" flow moves off the main page flow into a slide-over, so
+   adding an item no longer pushes every row below it down the page —
+   same pattern and layering as the Ask-Your-Portfolio panel. */
+.cx-drawer-backdrop {
+  position: fixed; inset: 0; background: rgba(20, 24, 20, 0.28); z-index: 55;
+  animation: cxfade 0.15s ease both;
+}
+@keyframes cxfade { from { opacity: 0; } to { opacity: 1; } }
+.cx-drawer {
+  position: fixed; top: 0; right: 0; height: 100vh; width: min(440px, 100vw);
+  background: var(--surface); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 56;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.14);
+  animation: cxslide 0.2s ease both;
+}
+@keyframes cxslide { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .cx-drawer-backdrop, .cx-drawer { animation: none; } }
+.cx-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--border); flex: none; }
+.cx-drawer-title { font-family: var(--font-display); font-size: 18px; margin: 0; }
+.cx-drawer-sub { font-size: 11.5px; color: var(--text-muted); margin: 3px 0 0; }
+.cx-drawer-close { border: none; background: none; color: var(--text-muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 4px; flex: none; }
+.cx-drawer-close:hover { background: var(--surface-2); color: var(--text); }
+.cx-drawer-body { padding: 20px 22px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+.cx-drawer-foot { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; flex: none; }
+.cx-field-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.cx-field-row .field { flex: 1 1 160px; min-width: 0; }
+.cx-drawer-body .hint { margin: 0; }
 
 /* ---------- Ask-Your-Portfolio Panel (task 29) ---------- */
 .row-ai-highlight { background: var(--accent-soft); transition: background 0.3s ease; }
